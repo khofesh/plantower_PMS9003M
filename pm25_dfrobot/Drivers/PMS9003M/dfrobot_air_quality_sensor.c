@@ -153,6 +153,11 @@ HAL_StatusTypeDef DFRobot_AirSensor_ReadReg(DFRobot_AirQualitySensor_t *sensor, 
         return status;
     }
 
+    // bridge MCU needs a few ms to latch the requested register before it
+    // can be clocked out; without this delay every read returns 0 (matches
+    // the delay(10) in the original DFRobot Arduino library)
+    HAL_Delay(10);
+
     // then read the data
     return HAL_I2C_Master_Receive(sensor->hi2c, sensor->i2c_addr, data, len, I2C_TIMEOUT);
 }

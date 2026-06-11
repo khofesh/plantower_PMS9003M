@@ -63,13 +63,7 @@ static void MX_ICACHE_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-/* Retarget printf to the BSP COM1 UART (hcom_uart[COM1], 115200 8N1).
- * _write() in syscalls.c calls __io_putchar() for each character. */
-int __io_putchar(int ch)
-{
-  HAL_UART_Transmit(&hcom_uart[COM1], (uint8_t *)&ch, 1, HAL_MAX_DELAY);
-  return ch;
-}
+
 
 /* USER CODE END 0 */
 
@@ -169,10 +163,10 @@ int main(void)
     uint16_t n10   = DFRobot_AirSensor_GetParticleNum_Every0_1L(&airSensor, PARTICLENUM_10_UM_EVERY0_1L_AIR);
 
     printf("\r\n--- Air quality reading ---\r\n");
-    printf("PM concentration (atmospheric) [ug/m3]:  PM1.0=%u  PM2.5=%u  PM10=%u\r\n",
-           pm1_0, pm2_5, pm10);
-    printf("PM concentration (standard)    [ug/m3]:  PM1.0=%u  PM2.5=%u  PM10=%u\r\n",
-           pm1_0_std, pm2_5_std, pm10_std);
+    printf("PM concentration (atmospheric) [ug/m3]:  PM1.0=%.1f  PM2.5=%.1f  PM10=%.1f\r\n",
+           (float)pm1_0, (float)pm2_5, (float)pm10);
+    printf("PM concentration (standard)    [ug/m3]:  PM1.0=%.1f  PM2.5=%.1f  PM10=%.1f\r\n",
+           (float)pm1_0_std, (float)pm2_5_std, (float)pm10_std);
     printf("Particle count [per 0.1L]: 0.3um=%u 0.5um=%u 1.0um=%u 2.5um=%u 5.0um=%u 10um=%u\r\n",
            n0_3, n0_5, n1_0, n2_5, n5_0, n10);
 
