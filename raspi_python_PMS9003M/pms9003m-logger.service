@@ -1,0 +1,16 @@
+[Unit]
+Description=PMS9003M PM2.5 logger
+After=multi-user.target
+
+[Service]
+Type=simple
+# Adjust User and paths to match your install.
+User=fahmi
+WorkingDirectory=/home/fahmi/raspi_python_PMS9003M
+ExecStart=/usr/bin/python3 /home/fahmi/raspi_python_PMS9003M/logger.py \
+    --port /dev/serial0 --db /home/fahmi/raspi_python_PMS9003M/pm25.db --window 60
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
