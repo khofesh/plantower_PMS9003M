@@ -129,3 +129,52 @@ The **atmospheric** values (bytes 10–15) are what `logger.py` records as
 | pm1_0   | mean PM1.0 (µg/m³, atmospheric)        |
 | pm2_5   | mean PM2.5                             |
 | pm10    | mean PM10                              |
+
+## Concurrency & data safety
+
+It is safe to **read and write the database at the same time** — e.g. the
+logger appending a row while the dashboard, `query.py`, or `export.py` read it.
+This setup is the normal case, and it is handled deliberately.
+
+### The model: one writer, many readers
+
+SQLite allows **at most one writer but any number of concurrent readers**.
+
+- `logger.py` is the **single writer**. Run only one instance per database
+  file. Two loggers on the same `pm25.db` is the one thing to avoid.
+- `dashboard.py`, `query.py`, `export.py`, `plot.py` are **read-only**. Run as
+  many of them as you like, whenever you like, while the logger runs.
+
+### What makes concurrent access safe here
+
+`logger.py` configures the database on startup (`init_db`):
+
+| Setting                         | Effect                                                                                                                                    |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `PRAGMA journal_mode=WAL`       | Write-Ahead Logging: readers and the writer no longer block each other. A reader sees a consistent snapshot while a write is in progress. |
+| `PRAGMA synchronous=NORMAL`     | Safe under WAL, with far fewer fsyncs — easier on the Pi's SD card.                                                                       |
+| `timeout=5.0` (all connections) | If a lock is ever briefly held, callers **wait up to 5 s** instead of raising `database is locked`.                                       |
+
+WAL mode is a persistent property of the database file, so once the logger has
+created it, every reader automatically benefits — no per-reader configuration
+needed beyond the busy timeout, which all scripts already set.
+
+### WAL sidecar files
+
+In WAL mode SQLite keeps two extra files next to the database:
+
+```
+pm25.db        pm25.db-wal        pm25.db-shm
+```
+
+This is normal. Leave them in place; they are part of the database. If you copy
+or back up the DB, either stop the logger first or copy all three together (or
+use `sqlite3 pm25.db ".backup backup.db"`, which is safe while running).
+
+### The serial port is _not_ shared
+
+Separately from the database: only **one process may open `/dev/serial0`**.
+The logger owns the sensor; the dashboard and the other tools never touch the
+port — they only read the database. Do not run a second program that opens the
+UART while the logger is running, or the two will steal each other's bytes and
+both will see corrupt frames.

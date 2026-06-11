@@ -30,7 +30,11 @@ CREATE INDEX IF NOT EXISTS idx_readings_ts ON readings(ts);
 
 
 def init_db(path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(path)
+    # timeout: wait (don't error) if another connection holds a lock.
+    conn = sqlite3.connect(path, timeout=5.0)
+    # WAL lets readers and the single writer run concurrently without blocking.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     conn.executescript(SCHEMA)
     conn.commit()
     return conn

@@ -27,7 +27,7 @@ def main() -> None:
 
     since = (datetime.now(timezone.utc) - timedelta(hours=args.hours)
              ).isoformat(timespec="seconds")
-    conn = sqlite3.connect(args.db)
+    conn = sqlite3.connect(args.db, timeout=5.0)
     rows = conn.execute(
         "SELECT ts, pm1_0, pm2_5, pm10 FROM readings "
         "WHERE ts >= ? ORDER BY ts ASC",

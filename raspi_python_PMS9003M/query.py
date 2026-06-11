@@ -15,7 +15,7 @@ def main() -> None:
     ap.add_argument("--last", type=int, default=20, help="rows to show")
     args = ap.parse_args()
 
-    conn = sqlite3.connect(args.db)
+    conn = sqlite3.connect(args.db, timeout=5.0)
     rows = conn.execute(
         "SELECT ts, samples, pm1_0, pm2_5, pm10 FROM readings "
         "ORDER BY ts DESC LIMIT ?",

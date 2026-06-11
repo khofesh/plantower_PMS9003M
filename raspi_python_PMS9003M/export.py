@@ -32,7 +32,7 @@ def main() -> None:
         params = (since,)
     query += " ORDER BY ts ASC"
 
-    conn = sqlite3.connect(args.db)
+    conn = sqlite3.connect(args.db, timeout=5.0)
     rows = conn.execute(query, params).fetchall()
     conn.close()
 
