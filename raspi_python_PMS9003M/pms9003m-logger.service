@@ -6,9 +6,9 @@ After=multi-user.target
 Type=simple
 # Adjust User and paths to match your install.
 User=fahmi
-WorkingDirectory=/home/fahmi/raspi_python_PMS9003M
-ExecStart=/usr/bin/python3 /home/fahmi/raspi_python_PMS9003M/logger.py \
-    --port /dev/serial0 --db /home/fahmi/raspi_python_PMS9003M/pm25.db --window 60
+WorkingDirectory=/home/fahmi/plantower_PMS9003M/raspi_python_PMS9003M
+ExecStart=/usr/bin/python3 /home/fahmi/plantower_PMS9003M/raspi_python_PMS9003M/logger.py \
+    --port /dev/serial0 --db /home/fahmi/plantower_PMS9003M/raspi_python_PMS9003M/pm25.db --window 60
 Restart=on-failure
 RestartSec=5
 

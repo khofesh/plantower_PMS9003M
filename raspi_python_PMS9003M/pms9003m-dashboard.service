@@ -7,9 +7,9 @@ Wants=network-online.target
 Type=simple
 # Adjust User and paths to match your install.
 User=fahmi
-WorkingDirectory=/home/fahmi/raspi_python_PMS9003M
-ExecStart=/usr/bin/python3 /home/fahmi/raspi_python_PMS9003M/dashboard.py \
-    --db /home/fahmi/raspi_python_PMS9003M/pm25.db --host 0.0.0.0 --port 8000
+WorkingDirectory=/home/fahmi/plantower_PMS9003M/raspi_python_PMS9003M
+ExecStart=/usr/bin/python3 /home/fahmi/plantower_PMS9003M/raspi_python_PMS9003M/dashboard.py \
+    --db /home/fahmi/plantower_PMS9003M/raspi_python_PMS9003M/pm25.db --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=5
 
