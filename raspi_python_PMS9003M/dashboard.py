@@ -18,6 +18,8 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
+from aqi import aqi_from_pm, classify_source
+
 DB_PATH = "pm25.db"
 
 PAGE = """<!doctype html>
@@ -43,11 +45,13 @@ PAGE = """<!doctype html>
 <body>
   <h1>Particulate matter — PMS9003M</h1>
   <div class="cards">
+    <div class="card"><div class="v" id="curaqi">–</div><div class="l" id="curcat">AQI</div></div>
     <div class="card"><div class="v" id="cur25">–</div><div class="l">PM2.5 µg/m³ (latest)</div></div>
     <div class="card"><div class="v" id="cur10">–</div><div class="l">PM10 µg/m³ (latest)</div></div>
     <div class="card"><div class="v" id="cur1">–</div><div class="l">PM1.0 µg/m³ (latest)</div></div>
     <div class="card"><div class="v" id="updated">–</div><div class="l">last reading (UTC)</div></div>
   </div>
+  <div class="card" id="srccard" style="margin-bottom:1rem;"><span id="source">–</span></div>
   <div class="controls">
     Window:
     <select id="hours">
@@ -86,6 +90,11 @@ async function refresh() {
     document.getElementById('cur10').textContent = j.pm10[i].toFixed(1);
     document.getElementById('cur1').textContent  = j.pm1_0[i].toFixed(1);
     document.getElementById('updated').textContent = j.t[i];
+    if (j.verdict) {
+      document.getElementById('curaqi').textContent = j.verdict.aqi ?? '>500';
+      document.getElementById('curcat').textContent = j.verdict.category;
+      document.getElementById('source').textContent = 'Source: ' + j.verdict.source;
+    }
   }
 }
 document.getElementById('hours').addEventListener('change', refresh);
@@ -102,17 +111,29 @@ def query_data(hours: float) -> dict:
              ).isoformat(timespec="seconds")
     conn = sqlite3.connect(DB_PATH, timeout=5.0)
     rows = conn.execute(
-        "SELECT ts, pm1_0, pm2_5, pm10 FROM readings "
-        "WHERE ts >= ? ORDER BY ts ASC",
+        "SELECT ts, pm1_0, pm2_5, pm10, n0_3, n0_5, n1_0, n2_5, n5_0, n10 "
+        "FROM readings WHERE ts >= ? ORDER BY ts ASC",
         (since,),
     ).fetchall()
     conn.close()
-    return {
+
+    out = {
         "t": [r[0].replace("T", " ").replace("+00:00", "") for r in rows],
         "pm1_0": [r[1] for r in rows],
         "pm2_5": [r[2] for r in rows],
         "pm10": [r[3] for r in rows],
+        "verdict": None,
     }
+    if rows:
+        ts, pm1, pm25, pm10, n0_3, n0_5, n1_0, n2_5, n5_0, n10 = rows[-1]
+        a = aqi_from_pm(pm25, pm10)
+        s = classify_source(n0_3, n0_5, n1_0, n2_5, n5_0, n10,
+                            pm2_5=pm25, pm10=pm10)
+        out["verdict"] = {
+            "aqi": a.aqi, "category": a.category,
+            "dominant": a.dominant, "source": s.label,
+        }
+    return out
 
 
 class Handler(BaseHTTPRequestHandler):

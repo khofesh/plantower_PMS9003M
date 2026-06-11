@@ -23,7 +23,9 @@ def main() -> None:
                     help="only the last N hours (default: all)")
     args = ap.parse_args()
 
-    query = "SELECT ts, samples, pm1_0, pm2_5, pm10 FROM readings"
+    cols = ("ts, samples, pm1_0, pm2_5, pm10, pm1_0_cf1, pm2_5_cf1, pm10_cf1, "
+            "n0_3, n0_5, n1_0, n2_5, n5_0, n10")
+    query = f"SELECT {cols} FROM readings"
     params: tuple = ()
     if args.hours is not None:
         since = (datetime.now(timezone.utc) - timedelta(hours=args.hours)
@@ -39,7 +41,9 @@ def main() -> None:
     out = sys.stdout if args.out == "-" else open(args.out, "w", newline="")
     try:
         w = csv.writer(out)
-        w.writerow(["ts", "samples", "pm1_0", "pm2_5", "pm10"])
+        w.writerow(["ts", "samples", "pm1_0", "pm2_5", "pm10",
+                    "pm1_0_cf1", "pm2_5_cf1", "pm10_cf1",
+                    "n0_3", "n0_5", "n1_0", "n2_5", "n5_0", "n10"])
         w.writerows(rows)
     finally:
         if out is not sys.stdout:

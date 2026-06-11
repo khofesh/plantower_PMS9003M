@@ -4,6 +4,13 @@ Reads the Plantower **PMS9003M** particulate sensor over the Pi's GPIO UART,
 averages the readings, and logs them to a local SQLite database. No broker,
 no microcontroller — the sensor talks straight to the idle Pi.
 
+All twelve sensor fields are stored (the three atmospheric PM concentrations,
+the three CF=1 concentrations, and the six particle-size counts), so the data
+can be turned into a verdict: `aqi.py` computes the **US EPA Air Quality Index**
+from the concentrations and guesses the particle **source** from the size
+distribution (fine/sub-micron → combustion/smoke; a coarse tail → dust/pollen).
+`query.py` and the dashboard surface that verdict directly.
+
 ## Hardware
 
 | PMS9003M         | Raspberry Pi 4                                     |
@@ -52,16 +59,31 @@ Live print (sanity check):
 python3 pms9003m.py
 ```
 
-Log averaged readings to SQLite (60s windows by default):
+Log averaged readings to SQLite (60s windows, after a 30s sensor warm-up that
+is discarded):
 
 ```bash
 python3 logger.py --print
+python3 logger.py --window 60 --warmup 30   # explicit defaults
 ```
 
-Inspect what's been logged:
+Inspect what's been logged, with an AQI + source verdict for the latest row:
 
 ```bash
 python3 query.py --last 30
+```
+
+```
+Latest (2026-06-11T10:00:00+00:00):
+  health : AQI 153 (Unhealthy), driven by PM2.5 -- everyone may begin to feel effects
+  source : fine-dominated, ~no coarse particles -- likely combustion/smoke (...)
+  detail : PM2.5/PM10=0.81, coarse(>=2.5um) share=0.231%
+```
+
+The scoring lives in `aqi.py` and is reusable on its own:
+
+```bash
+python3 -c "import aqi; print(aqi.summarize(58, 72, counts=(3031,2832,628,7,0,0)))"
 ```
 
 ## Viewing & exporting data
@@ -114,7 +136,8 @@ journalctl -u pms9003m-logger -f
 | 4–9   | PM1.0 / PM2.5 / PM10, CF=1 (standard particle)   |
 | 10–15 | PM1.0 / PM2.5 / PM10, **atmospheric** ← reported |
 | 16–27 | particle counts for 0.3/0.5/1.0/2.5/5.0/10 µm    |
-| 28–29 | reserved                                         |
+| 28    | version                                          |
+| 29    | error code                                       |
 | 30–31 | checksum = sum of bytes 0–29                     |
 
 The **atmospheric** values (bytes 10–15) are what `logger.py` records as
@@ -122,13 +145,21 @@ The **atmospheric** values (bytes 10–15) are what `logger.py` records as
 
 ## Data schema (`readings` table)
 
-| column  | meaning                                |
-| ------- | -------------------------------------- |
-| ts      | ISO-8601 UTC, end of averaging window  |
-| samples | number of frames averaged into the row |
-| pm1_0   | mean PM1.0 (µg/m³, atmospheric)        |
-| pm2_5   | mean PM2.5                             |
-| pm10    | mean PM10                              |
+| column                           | meaning                                         |
+| -------------------------------- | ----------------------------------------------- |
+| ts                               | ISO-8601 UTC, end of averaging window           |
+| samples                          | number of frames averaged into the row          |
+| pm1_0 / pm2_5 / pm10             | mean PM (µg/m³, **atmospheric** — report these) |
+| pm1_0_cf1 / pm2_5_cf1 / pm10_cf1 | mean PM (µg/m³, CF=1 standard particle)         |
+| n0_3 … n10                       | mean particle counts per 0.1 L (≥ named size)   |
+
+All columns are stored as the per-window mean. The CF=1 trio and the counts are
+what `aqi.py` needs for the source classification, so they are kept even though
+only the atmospheric PM is "reported" for health.
+
+> **Schema change:** earlier versions stored only `pm1_0/pm2_5/pm10`. A database
+> created by the old logger lacks the new columns; start a fresh `pm25.db` (or
+> `ALTER TABLE` to add them) when upgrading.
 
 ## Concurrency & data safety
 
