@@ -21,7 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "dfrobot_air_quality_sensor.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,7 +47,7 @@ COM_InitTypeDef BspCOMInit;
 I2C_HandleTypeDef hi2c2;
 
 /* USER CODE BEGIN PV */
-
+DFRobot_AirQualitySensor_t airSensor;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -61,6 +62,14 @@ static void MX_ICACHE_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+/* Retarget printf to the BSP COM1 UART (hcom_uart[COM1], 115200 8N1).
+ * _write() in syscalls.c calls __io_putchar() for each character. */
+int __io_putchar(int ch)
+{
+  HAL_UART_Transmit(&hcom_uart[COM1], (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+  return ch;
+}
 
 /* USER CODE END 0 */
 
@@ -119,10 +128,56 @@ int main(void)
     Error_Handler();
   }
 
+  /* USER CODE BEGIN 2.5 */
+  printf("\r\n=== PMS9003M / DFRobot Air Quality Sensor ===\r\n");
+
+  /* Bind the driver to I2C2 at the default 7-bit address (0x19) */
+  DFRobot_AirSensor_Init(&airSensor, &hi2c2, DFROBOT_AIR_SENSOR_DEFAULT_ADDR);
+
+  if (DFRobot_AirSensor_Begin(&airSensor))
+  {
+    printf("Sensor detected. Firmware version: %u\r\n",
+           DFRobot_AirSensor_GetVersion(&airSensor));
+  }
+  else
+  {
+    printf("ERROR: sensor not responding on I2C2 (addr 0x%02X)\r\n",
+           DFROBOT_AIR_SENSOR_DEFAULT_ADDR);
+  }
+  /* USER CODE END 2.5 */
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    /* PM concentration (atmospheric environment), micrograms / m^3 */
+    uint16_t pm1_0  = DFRobot_AirSensor_GetParticleConcentration_ugm3(&airSensor, PARTICLE_PM1_0_ATMOSPHERE);
+    uint16_t pm2_5  = DFRobot_AirSensor_GetParticleConcentration_ugm3(&airSensor, PARTICLE_PM2_5_ATMOSPHERE);
+    uint16_t pm10   = DFRobot_AirSensor_GetParticleConcentration_ugm3(&airSensor, PARTICLE_PM10_ATMOSPHERE);
+
+    /* PM concentration (standard particle), micrograms / m^3 */
+    uint16_t pm1_0_std = DFRobot_AirSensor_GetParticleConcentration_ugm3(&airSensor, PARTICLE_PM1_0_STANDARD);
+    uint16_t pm2_5_std = DFRobot_AirSensor_GetParticleConcentration_ugm3(&airSensor, PARTICLE_PM2_5_STANDARD);
+    uint16_t pm10_std  = DFRobot_AirSensor_GetParticleConcentration_ugm3(&airSensor, PARTICLE_PM10_STANDARD);
+
+    /* Particle counts, particles per 0.1 L of air */
+    uint16_t n0_3  = DFRobot_AirSensor_GetParticleNum_Every0_1L(&airSensor, PARTICLENUM_0_3_UM_EVERY0_1L_AIR);
+    uint16_t n0_5  = DFRobot_AirSensor_GetParticleNum_Every0_1L(&airSensor, PARTICLENUM_0_5_UM_EVERY0_1L_AIR);
+    uint16_t n1_0  = DFRobot_AirSensor_GetParticleNum_Every0_1L(&airSensor, PARTICLENUM_1_0_UM_EVERY0_1L_AIR);
+    uint16_t n2_5  = DFRobot_AirSensor_GetParticleNum_Every0_1L(&airSensor, PARTICLENUM_2_5_UM_EVERY0_1L_AIR);
+    uint16_t n5_0  = DFRobot_AirSensor_GetParticleNum_Every0_1L(&airSensor, PARTICLENUM_5_0_UM_EVERY0_1L_AIR);
+    uint16_t n10   = DFRobot_AirSensor_GetParticleNum_Every0_1L(&airSensor, PARTICLENUM_10_UM_EVERY0_1L_AIR);
+
+    printf("\r\n--- Air quality reading ---\r\n");
+    printf("PM concentration (atmospheric) [ug/m3]:  PM1.0=%u  PM2.5=%u  PM10=%u\r\n",
+           pm1_0, pm2_5, pm10);
+    printf("PM concentration (standard)    [ug/m3]:  PM1.0=%u  PM2.5=%u  PM10=%u\r\n",
+           pm1_0_std, pm2_5_std, pm10_std);
+    printf("Particle count [per 0.1L]: 0.3um=%u 0.5um=%u 1.0um=%u 2.5um=%u 5.0um=%u 10um=%u\r\n",
+           n0_3, n0_5, n1_0, n2_5, n5_0, n10);
+
+    BSP_LED_Toggle(LED_GREEN);
+    HAL_Delay(1000);
 
     /* USER CODE END WHILE */
 
