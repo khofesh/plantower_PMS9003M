@@ -22,6 +22,7 @@
 #include "stm32h5xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "pms9003m.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -241,5 +242,21 @@ void I2C2_ER_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+
+/**
+  * @brief This function handles USART1 global interrupt (PMS9003M).
+  */
+void USART1_IRQHandler(void)
+{
+  PMS9003M_USART1_IRQHandler();
+}
+
+/**
+  * @brief This function handles GPDMA1 Channel 0 global interrupt (PMS9003M RX).
+  */
+void GPDMA1_Channel0_IRQHandler(void)
+{
+  PMS9003M_GPDMA1_Channel0_IRQHandler();
+}
 
 /* USER CODE END 1 */
