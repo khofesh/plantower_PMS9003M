@@ -1,0 +1,15 @@
+!SESSION 2026-06-11 13:40:11.286 -----------------------------------------------
+eclipse.buildId=Version 2.1.1
+java.version=21.0.9
+java.vendor=Eclipse Adoptium
+BootLoader constants: OS=linux, ARCH=x86_64, WS=gtk, NL=en_US
+Command-line arguments:  -os linux -ws gtk -arch x86_64
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 1 1 2026-06-11 13:40:45.480
+!MESSAGE Log4j2 initialized with config file /media/wdhome/github/khofesh/stm32-projects-separated/pm25/.metadata/.log4j2.xml
+
+!ENTRY com.st.stm32cube.ide.mcu.ide 1 1 2026-06-11 13:40:47.379
+!MESSAGE Started RMI Server, listening on port 41337
+
+!ENTRY org.eclipse.cdt.core 1 0 2026-06-11 13:41:17.109
+!MESSAGE Indexed 'pm25_dfrobot' (26 sources, 128 headers) in 2.16 sec: 16,378 declarations; 86,012 references; 1 unresolved inclusions; 120 syntax errors; 247 unresolved names (0.24%)
