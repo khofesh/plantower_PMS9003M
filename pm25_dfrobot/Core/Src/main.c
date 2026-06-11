@@ -48,6 +48,7 @@ I2C_HandleTypeDef hi2c2;
 
 /* USER CODE BEGIN PV */
 DFRobot_AirQualitySensor_t airSensor;
+UART_HandleTypeDef huart1;   /* PMS9003M native UART: 9600 8N1 */
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -63,7 +64,125 @@ static void MX_ICACHE_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+/**
+  * @brief Scan the I2C bus and print every 7-bit address that ACKs.
+  * @param hi2c pointer to the I2C handle to probe
+  */
+static void I2C_Scan(I2C_HandleTypeDef *hi2c)
+{
+  printf("\r\nScanning I2C bus...\r\n");
 
+  uint8_t found = 0;
+  for (uint8_t addr7 = 0x01; addr7 < 0x78; addr7++)
+  {
+    /* HAL expects the 8-bit address (7-bit value shifted left by 1) */
+    if (HAL_I2C_IsDeviceReady(hi2c, (uint16_t)(addr7 << 1), 2, 10) == HAL_OK)
+    {
+      printf("  device found at 0x%02X (7-bit)\r\n", addr7);
+      found++;
+    }
+  }
+
+  if (found == 0)
+  {
+    printf("  no devices found - check wiring, power and pull-ups\r\n");
+  }
+  else
+  {
+    printf("  scan complete: %u device(s)\r\n", found);
+  }
+}
+
+/*
+ * PMS9003M native UART (used to test the bare sensor, bypassing the DFRobot
+ * I2C adapter board). Wire: sensor VCC=5V, GND common, sensor TX -> PA10.
+ *
+ * In its default active mode the sensor streams a 32-byte frame ~once a second:
+ *   [0]=0x42 [1]=0x4D  header
+ *   [2..3]  frame length (0x001C)
+ *   [4..9]  PM1.0/2.5/10 (standard particle, CF=1)
+ *   [10..15] PM1.0/2.5/10 (atmospheric environment)  <-- we report these
+ *   [16..27] particle counts
+ *   [28..29] reserved / version+error
+ *   [30..31] checksum = sum of bytes [0..29]
+ */
+#define PMS_FRAME_LEN 32
+
+static void MX_USART1_PMS_Init(void)
+{
+  GPIO_InitTypeDef gpio = {0};
+
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_USART1_CLK_ENABLE();
+
+  /* PA9 = USART1_TX, PA10 = USART1_RX (AF7); only RX is needed for the PMS */
+  gpio.Pin       = GPIO_PIN_9 | GPIO_PIN_10;
+  gpio.Mode      = GPIO_MODE_AF_PP;
+  gpio.Pull      = GPIO_NOPULL;
+  gpio.Speed     = GPIO_SPEED_FREQ_LOW;
+  gpio.Alternate = GPIO_AF7_USART1;
+  HAL_GPIO_Init(GPIOA, &gpio);
+
+  huart1.Instance          = USART1;
+  huart1.Init.BaudRate     = 9600;
+  huart1.Init.WordLength   = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits     = UART_STOPBITS_1;
+  huart1.Init.Parity       = UART_PARITY_NONE;
+  huart1.Init.Mode         = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl    = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
+  * @brief Read and validate one PMS9003M frame from USART1.
+  * @return true if a checksum-valid frame was captured (PM values filled in).
+  */
+static bool PMS_ReadFrame(uint16_t *pm1_0, uint16_t *pm2_5, uint16_t *pm10)
+{
+  uint8_t b;
+  uint8_t frame[PMS_FRAME_LEN];
+
+  /* sync to the 0x42 0x4D header */
+  if (HAL_UART_Receive(&huart1, &b, 1, 2000) != HAL_OK || b != 0x42)
+  {
+    return false;
+  }
+  if (HAL_UART_Receive(&huart1, &b, 1, 2000) != HAL_OK || b != 0x4D)
+  {
+    return false;
+  }
+  frame[0] = 0x42;
+  frame[1] = 0x4D;
+
+  /* remaining 30 bytes of the frame */
+  if (HAL_UART_Receive(&huart1, &frame[2], PMS_FRAME_LEN - 2, 2000) != HAL_OK)
+  {
+    return false;
+  }
+
+  /* checksum = sum of bytes [0..29], compared against [30..31] (big-endian) */
+  uint16_t sum = 0;
+  for (int i = 0; i < PMS_FRAME_LEN - 2; i++)
+  {
+    sum += frame[i];
+  }
+  uint16_t chk = ((uint16_t)frame[30] << 8) | frame[31];
+  if (sum != chk)
+  {
+    return false;
+  }
+
+  /* atmospheric-environment concentrations */
+  *pm1_0 = ((uint16_t)frame[10] << 8) | frame[11];
+  *pm2_5 = ((uint16_t)frame[12] << 8) | frame[13];
+  *pm10  = ((uint16_t)frame[14] << 8) | frame[15];
+
+  return true;
+}
 
 /* USER CODE END 0 */
 
@@ -125,53 +244,31 @@ int main(void)
   /* USER CODE BEGIN 2.5 */
   printf("\r\n=== PMS9003M / DFRobot Air Quality Sensor ===\r\n");
 
-  /* Bind the driver to I2C2 at the default 7-bit address (0x19) */
-  DFRobot_AirSensor_Init(&airSensor, &hi2c2, DFROBOT_AIR_SENSOR_DEFAULT_ADDR);
-
-  if (DFRobot_AirSensor_Begin(&airSensor))
-  {
-    printf("Sensor detected. Firmware version: %u\r\n",
-           DFRobot_AirSensor_GetVersion(&airSensor));
-  }
-  else
-  {
-    printf("ERROR: sensor not responding on I2C2 (addr 0x%02X)\r\n",
-           DFROBOT_AIR_SENSOR_DEFAULT_ADDR);
-  }
+  /* Bring up USART1 for the bare PMS9003M test (sensor TX -> PA10) */
+  MX_USART1_PMS_Init();
+  printf("Listening for PMS9003M UART frames on USART1 (PA10 = RX, 9600 8N1)...\r\n");
   /* USER CODE END 2.5 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    /* PM concentration (atmospheric environment), micrograms / m^3 */
-    uint16_t pm1_0  = DFRobot_AirSensor_GetParticleConcentration_ugm3(&airSensor, PARTICLE_PM1_0_ATMOSPHERE);
-    uint16_t pm2_5  = DFRobot_AirSensor_GetParticleConcentration_ugm3(&airSensor, PARTICLE_PM2_5_ATMOSPHERE);
-    uint16_t pm10   = DFRobot_AirSensor_GetParticleConcentration_ugm3(&airSensor, PARTICLE_PM10_ATMOSPHERE);
+    /* ---- Bare PMS9003M over its native UART (DFRobot adapter bypassed) ---- */
+    uint16_t u_pm1_0 = 0, u_pm2_5 = 0, u_pm10 = 0;
+    if (PMS_ReadFrame(&u_pm1_0, &u_pm2_5, &u_pm10))
+    {
+      printf("\r\n[PMS9003M UART] valid frame:  PM1.0=%u  PM2.5=%u  PM10=%u  [ug/m3]\r\n",
+             u_pm1_0, u_pm2_5, u_pm10);
+    }
+    else
+    {
+      printf("\r\n[PMS9003M UART] no valid frame (check 5V power, fan spinning, TX->PA10)\r\n");
+    }
 
-    /* PM concentration (standard particle), micrograms / m^3 */
-    uint16_t pm1_0_std = DFRobot_AirSensor_GetParticleConcentration_ugm3(&airSensor, PARTICLE_PM1_0_STANDARD);
-    uint16_t pm2_5_std = DFRobot_AirSensor_GetParticleConcentration_ugm3(&airSensor, PARTICLE_PM2_5_STANDARD);
-    uint16_t pm10_std  = DFRobot_AirSensor_GetParticleConcentration_ugm3(&airSensor, PARTICLE_PM10_STANDARD);
 
-    /* Particle counts, particles per 0.1 L of air */
-    uint16_t n0_3  = DFRobot_AirSensor_GetParticleNum_Every0_1L(&airSensor, PARTICLENUM_0_3_UM_EVERY0_1L_AIR);
-    uint16_t n0_5  = DFRobot_AirSensor_GetParticleNum_Every0_1L(&airSensor, PARTICLENUM_0_5_UM_EVERY0_1L_AIR);
-    uint16_t n1_0  = DFRobot_AirSensor_GetParticleNum_Every0_1L(&airSensor, PARTICLENUM_1_0_UM_EVERY0_1L_AIR);
-    uint16_t n2_5  = DFRobot_AirSensor_GetParticleNum_Every0_1L(&airSensor, PARTICLENUM_2_5_UM_EVERY0_1L_AIR);
-    uint16_t n5_0  = DFRobot_AirSensor_GetParticleNum_Every0_1L(&airSensor, PARTICLENUM_5_0_UM_EVERY0_1L_AIR);
-    uint16_t n10   = DFRobot_AirSensor_GetParticleNum_Every0_1L(&airSensor, PARTICLENUM_10_UM_EVERY0_1L_AIR);
+      BSP_LED_Toggle(LED_GREEN);
+      HAL_Delay(1000);
 
-    printf("\r\n--- Air quality reading ---\r\n");
-    printf("PM concentration (atmospheric) [ug/m3]:  PM1.0=%.1f  PM2.5=%.1f  PM10=%.1f\r\n",
-           (float)pm1_0, (float)pm2_5, (float)pm10);
-    printf("PM concentration (standard)    [ug/m3]:  PM1.0=%.1f  PM2.5=%.1f  PM10=%.1f\r\n",
-           (float)pm1_0_std, (float)pm2_5_std, (float)pm10_std);
-    printf("Particle count [per 0.1L]: 0.3um=%u 0.5um=%u 1.0um=%u 2.5um=%u 5.0um=%u 10um=%u\r\n",
-           n0_3, n0_5, n1_0, n2_5, n5_0, n10);
-
-    BSP_LED_Toggle(LED_GREEN);
-    HAL_Delay(1000);
 
     /* USER CODE END WHILE */
 
