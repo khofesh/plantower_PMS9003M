@@ -59,6 +59,7 @@ PAGE = """<!doctype html>
       <option value="6">6 h</option>
       <option value="24" selected>24 h</option>
       <option value="168">7 d</option>
+      <option value="720">30 d</option>
     </select>
   </div>
   <div id="wrap"><canvas id="chart" height="110"></canvas></div>
